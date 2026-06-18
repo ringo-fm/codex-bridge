@@ -182,16 +182,19 @@ struct ToolMappingTests {
         #expect(prompt.contains("[tool_output call_1] # README"))
     }
 
-    @Test("FeatureFlags.loadOverrides reads environment variables")
+    @Test("FeatureFlags.loadOverrides reads explicit environment variables")
     func featureFlagsEnvOverride() {
-        let env = ProcessInfo.processInfo.environment
-        let key = "AFM_BRIDGE_FEATURE_FUNCTION_CALL_TEST_\(UUID().uuidString.prefix(8))"
-        // Can't set env vars in process, but we can verify defaults
-        let flags = FeatureFlags.loadOverrides(base: .codexMinimal)
-        _ = env
-        _ = key
-        // Without env override, functionCall should be false
-        #expect(!flags.functionCall)
+        let flags = FeatureFlags.loadOverrides(
+            from: [
+                "AFM_BRIDGE_FEATURE_FUNCTION_CALL": "true",
+                "AFM_BRIDGE_FEATURE_SHELL_CALL": "1",
+                "AFM_BRIDGE_FEATURE_APPLY_PATCH": "false"
+            ],
+            base: .codexMinimal
+        )
+        #expect(flags.functionCall)
+        #expect(flags.shellCall)
+        #expect(!flags.applyPatchCall)
     }
 
     @Test("CompatibilityProfile.codexTools enables function call")
@@ -200,6 +203,46 @@ struct ToolMappingTests {
         #expect(profile.flags.functionCall)
         #expect(profile.flags.shellCall)
         #expect(profile.flags.applyPatchCall)
+    }
+
+    @Test("CompatibilityProfile.load defaults to codex-minimal")
+    func profileLoadDefault() {
+        let profile = CompatibilityProfile.load(from: [:])
+        #expect(profile.name == "codex-minimal")
+        #expect(!profile.flags.functionCall)
+        #expect(!profile.flags.shellCall)
+        #expect(!profile.flags.applyPatchCall)
+    }
+
+    @Test("CompatibilityProfile.load selects codex-tools")
+    func profileLoadCodexTools() {
+        let profile = CompatibilityProfile.load(from: ["AFM_BRIDGE_PROFILE": "codex-tools"])
+        #expect(profile.name == "codex-tools")
+        #expect(profile.flags.functionCall)
+        #expect(profile.flags.shellCall)
+        #expect(profile.flags.applyPatchCall)
+    }
+
+    @Test("CompatibilityProfile.load applies feature overrides")
+    func profileLoadFeatureOverrides() {
+        let profile = CompatibilityProfile.load(
+            from: [
+                "AFM_BRIDGE_PROFILE": "codex-tools",
+                "AFM_BRIDGE_FEATURE_FUNCTION_CALL": "0",
+                "AFM_BRIDGE_FEATURE_APPLY_PATCH": "false"
+            ]
+        )
+        #expect(profile.name == "codex-tools")
+        #expect(!profile.flags.functionCall)
+        #expect(profile.flags.shellCall)
+        #expect(!profile.flags.applyPatchCall)
+    }
+
+    @Test("CompatibilityProfile.load falls back to codex-minimal for unknown names")
+    func profileLoadUnknownFallsBack() {
+        let profile = CompatibilityProfile.load(from: ["AFM_BRIDGE_PROFILE": "unknown"])
+        #expect(profile.name == "codex-minimal")
+        #expect(!profile.flags.functionCall)
     }
 
     @Test("OutputMapper includes function_call items in response")

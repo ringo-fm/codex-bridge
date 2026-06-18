@@ -2,6 +2,8 @@
 #
 # Then export your bridge API key:
 #   export AFM_BRIDGE_API_KEY=dev
+# Optional staged tool profile:
+#   export AFM_BRIDGE_PROFILE=codex-tools
 # and start the bridge:
 #   swift run codex-afm-bridge
 #

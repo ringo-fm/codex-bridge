@@ -2,9 +2,11 @@ import Foundation
 import Logging
 
 let config = try BridgeConfig.load()
+let profile = CompatibilityProfile.loadFromEnv()
 
 var logger = Logger(label: "codex-afm-bridge")
 logger.logLevel = config.logLevel
+logger.info("Compatibility profile: \(profile.name)")
 
 let afm = AFMRuntime()
 let availability = afm.availability()
@@ -22,7 +24,7 @@ let services = BridgeServices(
     afm: afm,
     store: store,
     config: config,
-    profile: .codexMinimal,
+    profile: profile,
     logger: logger
 )
 

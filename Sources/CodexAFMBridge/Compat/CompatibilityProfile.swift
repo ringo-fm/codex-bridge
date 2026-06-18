@@ -43,14 +43,18 @@ public struct CompatibilityProfile: Sendable, Equatable {
 
     /// Load a profile from environment overrides.
     public static func loadFromEnv() -> CompatibilityProfile {
-        let env = ProcessInfo.processInfo.environment
+        load(from: ProcessInfo.processInfo.environment)
+    }
+
+    /// Load a profile from an explicit environment dictionary.
+    public static func load(from env: [String: String]) -> CompatibilityProfile {
         let profileName = env["AFM_BRIDGE_PROFILE"] ?? "codex-minimal"
         let base: CompatibilityProfile
         switch profileName {
         case "codex-tools": base = .codexTools
         default: base = .codexMinimal
         }
-        let flags = FeatureFlags.loadOverrides(base: base.flags)
-        return CompatibilityProfile(name: profileName, flags: flags, usage: base.usage, files: base.files)
+        let flags = FeatureFlags.loadOverrides(from: env, base: base.flags)
+        return CompatibilityProfile(name: base.name, flags: flags, usage: base.usage, files: base.files)
     }
 }

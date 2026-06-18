@@ -43,6 +43,7 @@ export AFM_BRIDGE_API_KEY=dev
 swift run codex-afm-bridge
 # AFM_BRIDGE_PORT (default 8765), AFM_BRIDGE_HOST (default 127.0.0.1)
 # AFM_BRIDGE_LOG_LEVEL, AFM_BRIDGE_DEBUG
+# AFM_BRIDGE_PROFILE (default codex-minimal; optional codex-tools)
 ```
 
 ## Smoke tests

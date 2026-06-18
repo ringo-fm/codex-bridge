@@ -50,7 +50,16 @@ public struct FeatureFlags: Sendable, Equatable {
     /// variable set to "1" or "true" enables that feature; "0" or "false"
     /// disables it.
     public static func loadOverrides(base: FeatureFlags = .codexMinimal) -> FeatureFlags {
-        let env = ProcessInfo.processInfo.environment
+        loadOverrides(from: ProcessInfo.processInfo.environment, base: base)
+    }
+
+    /// Load overrides from an explicit environment dictionary. This keeps the
+    /// production env loader simple while making profile behavior deterministic
+    /// in tests.
+    public static func loadOverrides(
+        from env: [String: String],
+        base: FeatureFlags = .codexMinimal
+    ) -> FeatureFlags {
         var flags = base
 
         func read(_ key: String) -> Bool? {

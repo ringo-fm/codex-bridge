@@ -565,6 +565,24 @@ features:
   encrypted_reasoning: false
 ```
 
+Runtime selection:
+
+```bash
+# Default: text-only Codex compatibility.
+export AFM_BRIDGE_PROFILE=codex-minimal
+
+# Experimental: enables staged function/tool-call mapping.
+export AFM_BRIDGE_PROFILE=codex-tools
+```
+
+Individual feature overrides are available for experiments:
+
+```bash
+export AFM_BRIDGE_FEATURE_FUNCTION_CALL=1
+export AFM_BRIDGE_FEATURE_SHELL_CALL=1
+export AFM_BRIDGE_FEATURE_APPLY_PATCH=1
+```
+
 Future tool profile:
 
 ```yaml
