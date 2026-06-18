@@ -54,8 +54,11 @@ public enum Routes {
             do {
                 body = try await request.decode(as: ResponsesCreateRequest.self, context: context)
             } catch {
+                services.logger.error("failed to decode request body: \(error.localizedDescription)")
                 throw BridgeError.invalidRequest("could not decode JSON body: \(error.localizedDescription)")
             }
+
+            services.logger.info("POST /v1/responses model=\(body.model) stream=\(body.stream ?? false) input_items=\(body.input.asItems.count)")
 
             guard SupportedModels.isSupported(body.model) else {
                 throw BridgeError.unsupportedModel(body.model)
@@ -64,13 +67,27 @@ public enum Routes {
             try rejectUnsupportedInputTypes(body)
 
             var normalized = InputNormalizer.normalize(body)
-            let prompt = PromptBuilder.build(from: normalized)
 
+            // Context-size guard with progressive truncation. AFM has a hard
+            // 4096-token ceiling; Codex system prompts are typically far larger.
+            // We build a bounded prompt that drops low-priority content to fit.
             let limit = services.afm.contextSize
-            let inputTokens = await services.afm.inputTokenCount(for: prompt) ?? OutputMapper.estimateTokens(text: prompt)
-            if inputTokens > limit {
-                services.logger.warning("context_too_large: ~\(inputTokens) tokens > limit \(limit)")
-                throw BridgeError.contextTooLarge(inputTokens: inputTokens, limit: limit)
+            let budget = limit - PromptBuilder.defaultOutputReserve
+            let (prompt, truncated, estTokens) = PromptBuilder.buildBounded(
+                from: normalized,
+                maxInputTokens: budget
+            )
+            if truncated {
+                services.logger.warning(
+                    "prompt_truncated: ~\(estTokens) tokens (budget \(budget), limit \(limit))"
+                )
+                normalized.diagnostics.note("prompt truncated to fit \(limit)-token context")
+            }
+            // If even after truncation we're still over (shouldn't happen with
+            // hard-truncate phase), bail out with a clear error.
+            if estTokens > limit {
+                services.logger.warning("context_too_large: ~\(estTokens) tokens > limit \(limit)")
+                throw BridgeError.contextTooLarge(inputTokens: estTokens, limit: limit)
             }
 
             let responseID = newID(prefix: "resp_afm_")
@@ -239,6 +256,11 @@ private func streamingResponse(
 
                     try await sse.write(.responseOutputTextDone(outputIndex: 0, contentIndex: 0, text: fullText), to: &writer)
 
+                    // Emit the completed item — Codex reads the final assistant
+                    // text from the `item` field of this event.
+                    let doneItem = ResponsesOutputItem.assistantMessage(id: messageID, text: fullText)
+                    try await sse.write(.responseOutputItemDone(outputIndex: 0, item: doneItem), to: &writer)
+
                     var diags = diagnostics
                     let inputTokens = await afm.inputTokenCount(for: afmRequest.prompt) ?? OutputMapper.estimateTokens(text: afmRequest.prompt)
                     let outputTokens = await afm.inputTokenCount(for: fullText) ?? OutputMapper.estimateTokens(text: fullText)
@@ -251,7 +273,7 @@ private func streamingResponse(
                         createdAt: createdAt,
                         diagnostics: &diags
                     )
-                    try await sse.write(.responseCompleted(completed), to: &writer)
+                    try await sse.write(.responseCompleted(completed, endTurn: true), to: &writer)
                     await store.store(completed)
                 }
             } catch is CancellationError {

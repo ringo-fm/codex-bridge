@@ -82,7 +82,11 @@ public enum BridgeError: Error, Sendable {
         case .generationFailed(let d):
             return "Apple Foundation Models generation failed: \(d)."
         case .contextTooLarge(let input, let limit):
-            return "Input exceeded supported context size (input ~\(input) tokens, limit \(limit))."
+            if input > 0 {
+                return "Input exceeded supported context size (input ~\(input) tokens, limit \(limit))."
+            } else {
+                return "Input exceeded supported context size (limit \(limit) tokens). The prompt was truncated but still exceeded the model's context window."
+            }
         case .unauthorized:
             return "Missing or invalid Authorization header. Expected 'Bearer <AFM_BRIDGE_API_KEY>'."
         case .invalidRequest(let d):

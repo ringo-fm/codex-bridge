@@ -11,7 +11,8 @@ public enum ResponsesEvent: Sendable {
     case responseContentPartAdded(outputIndex: Int, contentIndex: Int, part: ResponsesOutputContent)
     case responseOutputTextDelta(outputIndex: Int, contentIndex: Int, delta: String)
     case responseOutputTextDone(outputIndex: Int, contentIndex: Int, text: String)
-    case responseCompleted(ResponsesResponse)
+    case responseOutputItemDone(outputIndex: Int, item: ResponsesOutputItem)
+    case responseCompleted(ResponsesResponse, endTurn: Bool)
     case responseFailed(ResponsesResponse)
     case error(ResponsesErrorObject)
 
@@ -24,6 +25,7 @@ public enum ResponsesEvent: Sendable {
         case .responseContentPartAdded: return "response.content_part.added"
         case .responseOutputTextDelta: return "response.output_text.delta"
         case .responseOutputTextDone: return "response.output_text.done"
+        case .responseOutputItemDone: return "response.output_item.done"
         case .responseCompleted: return "response.completed"
         case .responseFailed: return "response.failed"
         case .error: return "error"
@@ -36,11 +38,19 @@ public enum ResponsesEvent: Sendable {
         switch self {
         case .responseCreated(let r),
              .responseInProgress(let r),
-             .responseCompleted(let r),
              .responseFailed(let r):
             value = EventPayload.response(EventPayload.Response(type: eventName, response: r))
+        case .responseCompleted(let r, let endTurn):
+            value = EventPayload.responseCompleted(EventPayload.ResponseCompleted(
+                type: eventName, response: EventPayload.CompletedResponse(
+                    id: r.id, status: r.status, usage: r.usage, end_turn: endTurn
+                )
+            ))
         case .responseOutputItemAdded(let idx, let item):
             value = EventPayload.outputItemAdded(EventPayload.OutputItemAdded(
+                type: eventName, output_index: idx, item: item))
+        case .responseOutputItemDone(let idx, let item):
+            value = EventPayload.outputItemDone(EventPayload.OutputItemDone(
                 type: eventName, output_index: idx, item: item))
         case .responseContentPartAdded(let oi, let ci, let part):
             value = EventPayload.contentPartAdded(EventPayload.ContentPartAdded(
@@ -68,12 +78,31 @@ private enum EventPayload {
     }
     static func response(_ r: Response) -> Encodable { r }
 
+    struct ResponseCompleted: Codable {
+        let type: String
+        let response: CompletedResponse
+    }
+    struct CompletedResponse: Codable {
+        let id: String
+        let status: ResponsesStatus
+        let usage: ResponsesUsage?
+        let end_turn: Bool
+    }
+    static func responseCompleted(_ r: ResponseCompleted) -> Encodable { r }
+
     struct OutputItemAdded: Codable {
         let type: String
         let output_index: Int
         let item: ResponsesOutputItem
     }
     static func outputItemAdded(_ p: OutputItemAdded) -> Encodable { p }
+
+    struct OutputItemDone: Codable {
+        let type: String
+        let output_index: Int
+        let item: ResponsesOutputItem
+    }
+    static func outputItemDone(_ p: OutputItemDone) -> Encodable { p }
 
     struct ContentPartAdded: Codable {
         let type: String

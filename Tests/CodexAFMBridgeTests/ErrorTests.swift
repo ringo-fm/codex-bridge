@@ -69,6 +69,14 @@ struct ErrorTests {
         #expect(ModelsList.default.data.allSatisfy { $0.object == "model" })
     }
 
+    @Test("ModelsList encodes both data and models fields for Codex compat")
+    func modelsListCodexCompat() throws {
+        let data = try JSONEncoder().encode(ModelsList.default)
+        let json = try #require(String(data: data, encoding: .utf8))
+        #expect(json.contains("\"data\""))
+        #expect(json.contains("\"models\""))
+    }
+
     @Test("CompatibilityProfile.codexMinimal is text-only")
     func codexMinimalProfile() {
         let profile = CompatibilityProfile.codexMinimal

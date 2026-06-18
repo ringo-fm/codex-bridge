@@ -35,6 +35,17 @@ struct StreamingTests {
         #expect(payload.contains("\"text\":\"Hello world\""))
     }
 
+    @Test("output_item.done event carries the completed assistant message")
+    func outputItemDoneEvent() throws {
+        let item = ResponsesOutputItem.assistantMessage(id: "msg_1", text: "final answer")
+        let event = ResponsesEvent.responseOutputItemDone(outputIndex: 0, item: item)
+        #expect(event.eventName == "response.output_item.done")
+        let payload = try event.data(encoder: JSONEncoder())
+        #expect(payload.contains("\"type\":\"response.output_item.done\""))
+        #expect(payload.contains("\"final answer\""))
+        #expect(payload.contains("\"status\":\"completed\""))
+    }
+
     @Test("response.completed event carries the full object")
     func completedEvent() throws {
         var diags = Diagnostics()
@@ -46,11 +57,12 @@ struct StreamingTests {
             outputTokens: 1,
             diagnostics: &diags
         )
-        let event = ResponsesEvent.responseCompleted(response)
+        let event = ResponsesEvent.responseCompleted(response, endTurn: true)
         #expect(event.eventName == "response.completed")
         let payload = try event.data(encoder: JSONEncoder())
         #expect(payload.contains("\"type\":\"response.completed\""))
         #expect(payload.contains("\"status\":\"completed\""))
+        #expect(payload.contains("\"end_turn\":true"))
     }
 
     @Test("error event carries the error object")

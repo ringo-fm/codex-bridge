@@ -136,4 +136,52 @@ struct PromptMappingTests {
         #expect(NormalizedMessage.Role.from(nil) == .user)
         #expect(NormalizedMessage.Role.from("SYSTEM") == .system)
     }
+
+    @Test("buildBounded returns full prompt when under budget")
+    func buildBoundedUnderBudget() {
+        let normalized = NormalizedInput(
+            instructions: "Be brief.",
+            messages: [NormalizedMessage(role: .user, text: "Hi")],
+            diagnostics: Diagnostics()
+        )
+        let result = PromptBuilder.buildBounded(from: normalized, maxInputTokens: 1000)
+        #expect(!result.truncated)
+        #expect(result.prompt.contains("Hi"))
+        #expect(result.estimatedTokens < 1000)
+    }
+
+    @Test("buildBounded truncates when over budget and keeps preamble")
+    func buildBoundedTruncates() {
+        let longText = String(repeating: "This is a long system instruction. ", count: 200)
+        let normalized = NormalizedInput(
+            instructions: longText,
+            messages: [
+                NormalizedMessage(role: .user, text: String(repeating: "Question detail. ", count: 100)),
+                NormalizedMessage(role: .assistant, text: String(repeating: "Answer detail. ", count: 100)),
+                NormalizedMessage(role: .user, text: "Final question?")
+            ],
+            diagnostics: Diagnostics()
+        )
+        let result = PromptBuilder.buildBounded(from: normalized, maxInputTokens: 100)
+        #expect(result.truncated)
+        #expect(result.estimatedTokens <= 100)
+        // Preamble is always preserved.
+        #expect(result.prompt.contains(PromptBuilder.preamble))
+        // The most recent user message is kept.
+        #expect(result.prompt.contains("Final question?"))
+    }
+
+    @Test("buildBounded hard-truncates to fit even with huge instructions")
+    func buildBoundedHardTruncate() {
+        let huge = String(repeating: "x", count: 10_000)
+        let normalized = NormalizedInput(
+            instructions: huge,
+            messages: [NormalizedMessage(role: .user, text: huge)],
+            diagnostics: Diagnostics()
+        )
+        let result = PromptBuilder.buildBounded(from: normalized, maxInputTokens: 200)
+        #expect(result.truncated)
+        #expect(result.estimatedTokens <= 200)
+        #expect(result.prompt.contains(PromptBuilder.preamble))
+    }
 }
