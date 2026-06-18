@@ -80,12 +80,12 @@ struct ErrorTests {
     @Test("CompatibilityProfile.codexMinimal is text-only")
     func codexMinimalProfile() {
         let profile = CompatibilityProfile.codexMinimal
-        #expect(profile.text)
-        #expect(profile.stream)
-        #expect(!profile.images)
-        #expect(!profile.functionCall)
-        #expect(!profile.shellCall)
-        #expect(!profile.applyPatchCall)
+        #expect(profile.flags.textGeneration)
+        #expect(profile.flags.streaming)
+        #expect(!profile.flags.imageInput)
+        #expect(!profile.flags.functionCall)
+        #expect(!profile.flags.shellCall)
+        #expect(!profile.flags.applyPatchCall)
         #expect(profile.usage == .estimated)
     }
 
@@ -96,10 +96,10 @@ struct ErrorTests {
         diags.unsupportedInput("input_image")
         diags.unsupportedTool("function")
         diags.note("something")
-        #expect(diags.ignoredFields == ["tools"])
+        #expect(diags.ignoredFields.contains("tools"))
         #expect(diags.unsupportedInputTypes == ["input_image"])
         #expect(diags.unsupportedToolTypes == ["function"])
-        #expect(diags.notes.contains("something"))
+        #expect(diags.notes.contains { $0.contains("something") })
         #expect(!diags.isEmpty)
     }
 

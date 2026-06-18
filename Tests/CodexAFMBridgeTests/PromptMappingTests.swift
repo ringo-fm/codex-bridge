@@ -55,17 +55,20 @@ struct PromptMappingTests {
         #expect(normalized.messages.first?.text == "describe this")
     }
 
-    @Test("non-message item types are recorded as unsupported")
+    @Test("non-message item types are recorded as unsupported or ignored")
     func nonMessageItemsRecorded() {
         let request = ResponsesCreateRequest(
             model: "apple-foundation-local",
             input: .items([
                 ResponsesInputItem(type: "function_call", role: "assistant", content: nil),
+                ResponsesInputItem(type: "reasoning", role: "assistant", content: nil),
                 .user(text: "ok")
             ])
         )
         let normalized = InputNormalizer.normalize(request)
-        #expect(normalized.diagnostics.unsupportedInputTypes.contains("function_call"))
+        // function_call is ignored (not enabled), reasoning is unsupported
+        #expect(normalized.diagnostics.ignoredFields.contains("function_call"))
+        #expect(normalized.diagnostics.unsupportedInputTypes.contains("reasoning"))
         #expect(normalized.messages.count == 1)
     }
 

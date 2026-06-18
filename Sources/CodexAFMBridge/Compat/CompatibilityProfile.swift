@@ -1,20 +1,12 @@
 import Foundation
 
 /// The compatibility profile describes which Responses API features the bridge
-/// currently honors. v0 is `codex-minimal`: text-only, streaming, estimated
-/// usage, no images/files/tools/shell.
+/// currently honors. It combines a named profile with runtime feature flags.
 public struct CompatibilityProfile: Sendable, Equatable {
-    public var text: Bool
-    public var stream: Bool
+    public var name: String
+    public var flags: FeatureFlags
     public var usage: UsageMode
-    public var images: Bool
     public var files: FileMode
-    public var functionCall: Bool
-    public var shellCall: Bool
-    public var applyPatchCall: Bool
-    public var mcp: Bool
-    public var reasoningItems: Bool
-    public var encryptedReasoning: Bool
 
     public enum UsageMode: String, Sendable, Equatable {
         case estimated
@@ -26,17 +18,39 @@ public struct CompatibilityProfile: Sendable, Equatable {
         case textOnly
     }
 
+    public init(name: String, flags: FeatureFlags, usage: UsageMode, files: FileMode) {
+        self.name = name
+        self.flags = flags
+        self.usage = usage
+        self.files = files
+    }
+
+    /// v0: text-only, no tools, estimated usage.
     public static let codexMinimal = CompatibilityProfile(
-        text: true,
-        stream: true,
+        name: "codex-minimal",
+        flags: .codexMinimal,
         usage: .estimated,
-        images: false,
-        files: .textOnly,
-        functionCall: false,
-        shellCall: false,
-        applyPatchCall: false,
-        mcp: false,
-        reasoningItems: false,
-        encryptedReasoning: false
+        files: .textOnly
     )
+
+    /// v1: adds function-call support.
+    public static let codexTools = CompatibilityProfile(
+        name: "codex-tools",
+        flags: .codexTools,
+        usage: .estimated,
+        files: .textOnly
+    )
+
+    /// Load a profile from environment overrides.
+    public static func loadFromEnv() -> CompatibilityProfile {
+        let env = ProcessInfo.processInfo.environment
+        let profileName = env["AFM_BRIDGE_PROFILE"] ?? "codex-minimal"
+        let base: CompatibilityProfile
+        switch profileName {
+        case "codex-tools": base = .codexTools
+        default: base = .codexMinimal
+        }
+        let flags = FeatureFlags.loadOverrides(base: base.flags)
+        return CompatibilityProfile(name: profileName, flags: flags, usage: base.usage, files: base.files)
+    }
 }

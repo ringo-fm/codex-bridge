@@ -46,13 +46,14 @@ public enum ResponsesStatus: String, Codable, Sendable, Equatable {
 
 // MARK: - Output items
 
-/// One item in the `output` array. For v0 we only emit `message` items.
+/// One item in the `output` array. Supports both `message` items (text) and
+/// `function_call` items (tool calls).
 public struct ResponsesOutputItem: Codable, Sendable, Equatable {
     public var id: String
     public var type: String
     public var status: ResponsesStatus
-    public var role: String
-    public var content: [ResponsesOutputContent]
+    public var role: String?
+    public var content: [ResponsesOutputContent]?
     public var call_id: String?
     public var name: String?
     public var arguments: String?
@@ -61,8 +62,8 @@ public struct ResponsesOutputItem: Codable, Sendable, Equatable {
         id: String,
         type: String,
         status: ResponsesStatus,
-        role: String,
-        content: [ResponsesOutputContent],
+        role: String? = nil,
+        content: [ResponsesOutputContent]? = nil,
         call_id: String? = nil,
         name: String? = nil,
         arguments: String? = nil
@@ -86,6 +87,46 @@ public struct ResponsesOutputItem: Codable, Sendable, Equatable {
             role: "assistant",
             content: [.text(text)]
         )
+    }
+
+    /// Convenience constructor for a function_call output item.
+    public static func functionCall(id: String, callID: String, name: String, arguments: String) -> ResponsesOutputItem {
+        ResponsesOutputItem(
+            id: id,
+            type: "function_call",
+            status: .completed,
+            call_id: callID,
+            name: name,
+            arguments: arguments
+        )
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case id, type, status, role, content, call_id, name, arguments
+    }
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        self.id = try c.decodeIfPresent(String.self, forKey: .id) ?? ""
+        self.type = try c.decodeIfPresent(String.self, forKey: .type) ?? "message"
+        self.status = try c.decodeIfPresent(ResponsesStatus.self, forKey: .status) ?? .completed
+        self.role = try c.decodeIfPresent(String.self, forKey: .role)
+        self.content = try c.decodeIfPresent([ResponsesOutputContent].self, forKey: .content)
+        self.call_id = try c.decodeIfPresent(String.self, forKey: .call_id)
+        self.name = try c.decodeIfPresent(String.self, forKey: .name)
+        self.arguments = try c.decodeIfPresent(String.self, forKey: .arguments)
+    }
+
+    public func encode(to encoder: Encoder) throws {
+        var c = encoder.container(keyedBy: CodingKeys.self)
+        try c.encode(id, forKey: .id)
+        try c.encode(type, forKey: .type)
+        try c.encode(status, forKey: .status)
+        try c.encodeIfPresent(role, forKey: .role)
+        try c.encodeIfPresent(content, forKey: .content)
+        try c.encodeIfPresent(call_id, forKey: .call_id)
+        try c.encodeIfPresent(name, forKey: .name)
+        try c.encodeIfPresent(arguments, forKey: .arguments)
     }
 }
 

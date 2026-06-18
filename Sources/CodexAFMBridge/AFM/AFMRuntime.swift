@@ -12,6 +12,7 @@ public struct AFMGenerateRequest: Sendable {
     public let temperature: Double?
     public let maxOutputTokens: Int?
     public let topP: Double?
+    public let toolRegistry: BridgedToolRegistry?
 
     public init(
         responseID: String,
@@ -21,7 +22,8 @@ public struct AFMGenerateRequest: Sendable {
         stream: Bool,
         temperature: Double? = nil,
         maxOutputTokens: Int? = nil,
-        topP: Double? = nil
+        topP: Double? = nil,
+        toolRegistry: BridgedToolRegistry? = nil
     ) {
         self.responseID = responseID
         self.model = model
@@ -31,6 +33,7 @@ public struct AFMGenerateRequest: Sendable {
         self.temperature = temperature
         self.maxOutputTokens = maxOutputTokens
         self.topP = topP
+        self.toolRegistry = toolRegistry
     }
 }
 
@@ -40,12 +43,20 @@ public struct AFMGenerateResult: Sendable {
     public let inputTokens: Int?
     public let outputTokens: Int?
     public let finishReason: String
+    public let toolCalls: [CapturedToolCall]
 
-    public init(text: String, inputTokens: Int? = nil, outputTokens: Int? = nil, finishReason: String = "stop") {
+    public init(
+        text: String,
+        inputTokens: Int? = nil,
+        outputTokens: Int? = nil,
+        finishReason: String = "stop",
+        toolCalls: [CapturedToolCall] = []
+    ) {
         self.text = text
         self.inputTokens = inputTokens
         self.outputTokens = outputTokens
         self.finishReason = finishReason
+        self.toolCalls = toolCalls
     }
 }
 
@@ -117,7 +128,7 @@ public final class AFMRuntime: Sendable {
     public func generate(_ request: AFMGenerateRequest) async throws -> AFMGenerateResult {
         try AFMAvailabilityProbe.requireAvailable()
 
-        let session = makeSession(instructions: request.instructions)
+        let session = makeSession(instructions: request.instructions, tools: request.toolRegistry)
         let options = makeOptions(
             temperature: request.temperature,
             maxOutputTokens: request.maxOutputTokens,
@@ -130,11 +141,13 @@ public final class AFMRuntime: Sendable {
             try Task.checkCancellation()
             let text = response.content
             let outputTokens = await outputTokenCount(for: text)
+            let toolCalls = request.toolRegistry?.drainAllCapturedCalls() ?? []
             return AFMGenerateResult(
                 text: text,
                 inputTokens: nil,
                 outputTokens: outputTokens,
-                finishReason: "stop"
+                finishReason: toolCalls.isEmpty ? "stop" : "tool_calls",
+                toolCalls: toolCalls
             )
         } catch is CancellationError {
             throw BridgeError.generationCancelled
@@ -154,7 +167,7 @@ public final class AFMRuntime: Sendable {
     ) async throws -> AsyncThrowingStream<AFMStreamSnapshot, Error> {
         try AFMAvailabilityProbe.requireAvailable()
 
-        let session = makeSession(instructions: request.instructions)
+        let session = makeSession(instructions: request.instructions, tools: request.toolRegistry)
         let options = makeOptions(
             temperature: request.temperature,
             maxOutputTokens: request.maxOutputTokens,
@@ -187,10 +200,15 @@ public final class AFMRuntime: Sendable {
 
     // MARK: - Internals
 
-    private func makeSession(instructions: String?) -> LanguageModelSession {
+    private func makeSession(instructions: String?, tools: BridgedToolRegistry? = nil) -> LanguageModelSession {
         let trimmed = instructions?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let afmTools = tools?.afmTools ?? []
+
         if let trimmed, !trimmed.isEmpty {
-            return LanguageModelSession(model: model, instructions: trimmed)
+            return LanguageModelSession(model: model, tools: afmTools, instructions: trimmed)
+        }
+        if !afmTools.isEmpty {
+            return LanguageModelSession(model: model, tools: afmTools)
         }
         return LanguageModelSession(model: model)
     }

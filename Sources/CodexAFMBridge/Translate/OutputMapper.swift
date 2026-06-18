@@ -13,6 +13,19 @@ public enum OutputMapper {
         let messageID = newID(prefix: "msg_afm_")
         let message = ResponsesOutputItem.assistantMessage(id: messageID, text: result.text)
 
+        // Build function_call items for any captured tool calls.
+        var output: [ResponsesOutputItem] = [message]
+        for call in result.toolCalls {
+            let callID = newID(prefix: "call_afm_")
+            let fcID = newID(prefix: "fc_afm_")
+            output.append(ResponsesOutputItem.functionCall(
+                id: fcID,
+                callID: callID,
+                name: call.name,
+                arguments: call.argumentsJSON
+            ))
+        }
+
         let usage: ResponsesUsage? = makeUsage(
             inputTokens: result.inputTokens,
             outputTokens: result.outputTokens,
@@ -25,7 +38,7 @@ public enum OutputMapper {
             created_at: createdAt,
             status: .completed,
             model: model,
-            output: [message],
+            output: output,
             usage: usage
         )
     }

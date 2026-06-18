@@ -24,8 +24,8 @@ struct ResponsesTextTests {
         #expect(response.output.count == 1)
         #expect(response.output.first?.type == "message")
         #expect(response.output.first?.role == "assistant")
-        #expect(response.output.first?.content.first?.type == "output_text")
-        #expect(response.output.first?.content.first?.text == "Hello world")
+        #expect(response.output.first?.content?.first?.type == "output_text")
+        #expect(response.output.first?.content?.first?.text == "Hello world")
         #expect(response.usage?.input_tokens == 10)
         #expect(response.usage?.output_tokens == 5)
         #expect(response.usage?.total_tokens == 15)
@@ -95,7 +95,7 @@ struct ResponsesTextTests {
             diagnostics: &diags
         )
         #expect(response.status == .completed)
-        #expect(response.output.first?.content.first?.text == "final answer")
+        #expect(response.output.first?.content?.first?.text == "final answer")
         #expect(response.usage?.total_tokens == 4)
     }
 

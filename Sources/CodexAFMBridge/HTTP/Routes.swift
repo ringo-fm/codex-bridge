@@ -64,9 +64,9 @@ public enum Routes {
                 throw BridgeError.unsupportedModel(body.model)
             }
 
-            try rejectUnsupportedInputTypes(body)
+            try rejectUnsupportedInputTypes(body, flags: services.profile.flags)
 
-            var normalized = InputNormalizer.normalize(body)
+            var normalized = InputNormalizer.normalize(body, flags: services.profile.flags)
 
             // Context-size guard with progressive truncation. AFM has a hard
             // 4096-token ceiling; Codex system prompts are typically far larger.
@@ -81,7 +81,7 @@ public enum Routes {
                 services.logger.warning(
                     "prompt_truncated: ~\(estTokens) tokens (budget \(budget), limit \(limit))"
                 )
-                normalized.diagnostics.note("prompt truncated to fit \(limit)-token context")
+                normalized.diagnostics.markTruncated("prompt", detail: "fit \(limit)-token context")
             }
             // If even after truncation we're still over (shouldn't happen with
             // hard-truncate phase), bail out with a clear error.
@@ -93,6 +93,15 @@ public enum Routes {
             let responseID = newID(prefix: "resp_afm_")
             let stream = body.stream ?? false
 
+            // Map tools to AFM BridgedTools when function-call is enabled.
+            var toolRegistry: BridgedToolRegistry? = nil
+            if services.profile.flags.functionCall, let tools = body.tools, !tools.isEmpty {
+                toolRegistry = ToolMapper.map(tools)
+                if let toolRegistry {
+                    services.logger.info("tools: \(toolRegistry.afmTools.count) tool(s) mapped")
+                }
+            }
+
             let afmRequest = AFMGenerateRequest(
                 responseID: responseID,
                 model: body.model,
@@ -101,7 +110,8 @@ public enum Routes {
                 stream: stream,
                 temperature: body.temperature,
                 maxOutputTokens: body.max_output_tokens,
-                topP: body.top_p
+                topP: body.top_p,
+                toolRegistry: toolRegistry
             )
 
             if stream {
@@ -256,10 +266,23 @@ private func streamingResponse(
 
                     try await sse.write(.responseOutputTextDone(outputIndex: 0, contentIndex: 0, text: fullText), to: &writer)
 
-                    // Emit the completed item — Codex reads the final assistant
-                    // text from the `item` field of this event.
+                    // Emit the completed message item — Codex reads the final
+                    // assistant text from the `item` field of this event.
                     let doneItem = ResponsesOutputItem.assistantMessage(id: messageID, text: fullText)
                     try await sse.write(.responseOutputItemDone(outputIndex: 0, item: doneItem), to: &writer)
+
+                    // Emit function_call items for any tools AFM called.
+                    let toolCalls = afmRequest.toolRegistry?.drainAllCapturedCalls() ?? []
+                    for (idx, call) in toolCalls.enumerated() {
+                        let callID = newID(prefix: "call_afm_")
+                        let fcID = newID(prefix: "fc_afm_")
+                        let fcItem = ResponsesOutputItem.functionCall(
+                            id: fcID, callID: callID, name: call.name, arguments: call.argumentsJSON
+                        )
+                        let outputIdx = idx + 1
+                        try await sse.write(.responseOutputItemAdded(outputIndex: outputIdx, item: fcItem), to: &writer)
+                        try await sse.write(.responseOutputItemDone(outputIndex: outputIdx, item: fcItem), to: &writer)
+                    }
 
                     var diags = diagnostics
                     let inputTokens = await afm.inputTokenCount(for: afmRequest.prompt) ?? OutputMapper.estimateTokens(text: afmRequest.prompt)
@@ -291,15 +314,19 @@ private let afmDiagnosticsHeader = "x-afm-diagnostics"
 
 /// Reject requests that contain hard-unsupported input content types (images,
 /// files) so the client gets a clear 400 instead of silent dropping.
-private func rejectUnsupportedInputTypes(_ request: ResponsesCreateRequest) throws {
+private func rejectUnsupportedInputTypes(_ request: ResponsesCreateRequest, flags: FeatureFlags) throws {
     for item in request.input.asItems {
         guard let parts = item.content else { continue }
         for part in parts {
             switch part.type {
             case "input_image":
-                throw BridgeError.unsupportedInputType("input_image")
+                if !flags.imageInput {
+                    throw BridgeError.unsupportedInputType("input_image")
+                }
             case "input_file":
-                throw BridgeError.unsupportedInputType("input_file")
+                if !flags.fileInput {
+                    throw BridgeError.unsupportedInputType("input_file")
+                }
             default:
                 break
             }
@@ -309,20 +336,8 @@ private func rejectUnsupportedInputTypes(_ request: ResponsesCreateRequest) thro
 
 /// Encode diagnostics into a response header for debug builds.
 private func injectDiagnosticsHeader(_ headers: inout HTTPFields, _ diagnostics: Diagnostics) {
-    var bits: [String] = []
-    if !diagnostics.ignoredFields.isEmpty {
-        bits.append("ignored=" + diagnostics.ignoredFields.joined(separator: ","))
-    }
-    if !diagnostics.unsupportedInputTypes.isEmpty {
-        bits.append("unsupported_input=" + diagnostics.unsupportedInputTypes.joined(separator: ","))
-    }
-    if !diagnostics.unsupportedToolTypes.isEmpty {
-        bits.append("unsupported_tool=" + diagnostics.unsupportedToolTypes.joined(separator: ","))
-    }
-    if diagnostics.estimatedUsage {
-        bits.append("usage=estimated")
-    }
-    if !bits.isEmpty {
-        headers[.init(afmDiagnosticsHeader)!] = bits.joined(separator: "; ")
+    let summary = diagnostics.summary
+    if !summary.isEmpty {
+        headers[.init(afmDiagnosticsHeader)!] = summary
     }
 }

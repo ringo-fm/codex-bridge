@@ -87,17 +87,35 @@ public enum ResponsesInput: Codable, Sendable, Equatable {
 }
 
 /// One entry in the `input` array. Roles map to the Responses API message roles.
+/// Also covers `function_call` and `function_call_output` item types.
 public struct ResponsesInputItem: Codable, Sendable, Equatable {
     public var type: String?
     public var role: String?
     public var content: [ResponsesInputContent]?
     public var status: String?
+    public var id: String?
+    public var call_id: String?
+    public var name: String?
+    public var arguments: String?
 
-    public init(type: String? = nil, role: String? = nil, content: [ResponsesInputContent]? = nil, status: String? = nil) {
+    public init(
+        type: String? = nil,
+        role: String? = nil,
+        content: [ResponsesInputContent]? = nil,
+        status: String? = nil,
+        id: String? = nil,
+        call_id: String? = nil,
+        name: String? = nil,
+        arguments: String? = nil
+    ) {
         self.type = type
         self.role = role
         self.content = content
         self.status = status
+        self.id = id
+        self.call_id = call_id
+        self.name = name
+        self.arguments = arguments
     }
 
     /// Convenience constructor for a plain user text message.

@@ -72,6 +72,14 @@ public enum PromptBuilder {
             }
         }
 
+        // Include previous tool calls and their outputs in the conversation.
+        for call in normalized.toolCalls {
+            conversation.append("[assistant tool_call] \(call.name)(\(call.arguments))")
+        }
+        for output in normalized.toolOutputs {
+            conversation.append("[tool_output \(output.callID)] \(output.output)")
+        }
+
         if !systemBlocks.isEmpty {
             sections.append("System instructions:\n" + systemBlocks.joined(separator: "\n\n"))
         }
